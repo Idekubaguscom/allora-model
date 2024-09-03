@@ -1,0 +1,52 @@
+services:
+  inference:
+    container_name: inference-basic-eth-pred
+    build: .
+    command: python -u /app/app.py
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./inference-data:/app/data
+      - ./logs:/app/logs
+
+      
+  updater:
+    container_name: updater-basic-eth-pred
+    build: .
+    environment:
+      - INFERENCE_API_ADDRESS=http://inference:8000
+    command: >
+      sh -c "
+      while true; do
+        python -u /app/update_app.py;
+        sleep 1d;
+      done
+      "
+    depends_on:
+      - inference
+  
+  worker:
+    container_name: worker
+    image: alloranetwork/allora-offchain-node:latest
+    volumes:
+      - ./worker-data:/data
+    ports:
+      - 2112:2112
+    depends_on:
+      - inference
+    env_file:
+      - ./worker-data/env_file
+
+  log-monitor:
+    container_name: log-monitor
+    build: .
+    command: python -u /app/log_monitor.py
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - inference
+
+volumes:
+  inference-data:
+  worker-data:
+  logs:
