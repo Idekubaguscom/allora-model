@@ -1,0 +1,106 @@
+{
+    "wallet": {
+        "addressKeyName": "wallet",
+        "addressRestoreMnemonic": "",
+        "alloraHomeDir": "",
+        "gas": "1000000",
+        "gasAdjustment": 1.0,
+        "nodeRpc": "",
+        "maxRetries": 1,
+        "delay": 1,
+        "submitTx": false
+    },
+    "worker": [
+        {
+            "topicId": 1,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 1,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}/{Timeframe}",
+                "Token": "ETH",
+                "Timeframe": "10m"
+            }
+        },
+        {
+            "topicId": 2,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 3,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}/{Timeframe}",
+                "Token": "ETH",
+                "Timeframe": "1d"
+            }
+        },
+        {
+            "topicId": 3,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 5,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}/{Timeframe}",
+                "Token": "BTC",
+                "Timeframe": "10m"
+            }
+        },
+        {
+            "topicId": 4,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 7,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}/{Timeframe}",
+                "Token": "BTC",
+                "Timeframe": "1d"
+            }
+        },
+        {
+            "topicId": 5,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 9,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}/{Timeframe}",
+                "Token": "SOL",
+                "Timeframe": "10m"
+            }
+        },
+        {
+            "topicId": 6,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 11,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}/{Timeframe}",
+                "Token": "SOL",
+                "Timeframe": "1d"
+            }
+        },
+        {
+            "topicId": 7,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 12,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}/{Timeframe}",
+                "Token": "ETH",
+                "Timeframe": "20m"
+            }
+        },
+        {
+            "topicId": 8,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 13,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}/{Timeframe}",
+                "Token": "BNB",
+                "Timeframe": "20m"
+            }
+        },
+        {
+            "topicId": 9,
+            "inferenceEntrypointName": "api-worker-reputer",
+            "loopSeconds": 14,
+            "parameters": {
+                "InferenceEndpoint": "http://inference:8000/inference/{Token}/{Timeframe}",
+                "Token": "ARB",
+                "Timeframe": "20m"
+            }
+        }
+        
+    ]
+}
