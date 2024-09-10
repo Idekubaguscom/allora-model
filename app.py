@@ -9,8 +9,9 @@ import numpy as np
 from datetime import datetime
 from flask import Flask, jsonify, Response, current_app
 from model import download_data, train_model
+from pmdarima import auto_arima
 from config import model_file_path, training_price_data_path, supported_tokens, supported_timeframes
-from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.model_selection import GridSearchCV
 from collections import deque
 from datetime import datetime, timedelta
 from price_history import PriceHistory
@@ -18,13 +19,11 @@ from utils import get_current_price
 from threading import Timer
 from statsmodels.tsa.arima.model import ARIMA
 from arch import arch_model
-
-price_history = PriceHistory()
-
+from arch.__future__ import reindexing
 
 app = Flask(__name__)
 prediction_history = {}
-price_history = PriceHistory()
+#price_history = PriceHistory()
 accuracy_results = {}
 
 log_dir = '/app/logs'
@@ -54,7 +53,7 @@ def get_inference(token, timeframe):
     current_price = get_current_price(token)
 
     # Calculate MA and Bollinger Bands
-    if timeframe in ['10m', '20m']:
+    if timeframe in ['10m', '20m', '60m']:
         spread = np.random.uniform(-0.0035, 0.0035)  # Random spread between -2% and +0.5%
     elif timeframe == '1d':
         spread = np.random.uniform(-0.025, 0.025)  # Random spread between -3% and +3%
@@ -90,6 +89,7 @@ last_timer_set_time = {}
 @app.route("/inference/<string:token>/<string:timeframe>")
 def generate_inference(token, timeframe):
     model = get_model(token, timeframe)
+    price_history = PriceHistory(token, timeframe)
     if token not in supported_tokens or timeframe not in supported_timeframes:
         return Response(json.dumps({"error": "Unsupported token or timeframe"}), status=400, mimetype='application/json')
 
@@ -111,135 +111,134 @@ def generate_inference(token, timeframe):
         # Ensure prediction is positive
         prediction = max(prediction, 0)
         price_history.save_prediction(token, timeframe, prediction, datetime.now().isoformat())
-        
-        check_accuracy(token, timeframe)
-        def run_check_accuracy():
+
+        latest_prediction = price_history.get_latest_prediction(token, timeframe)['predicted_price']
+        if latest_prediction is None:
+            logging.error(f"No previous prediction found for {token}/{timeframe}.")
+        else :
             with app.app_context():
                 check_accuracy(token, timeframe)
-    
-        buffer_time = 120
-        delay = pd.Timedelta(timeframe).total_seconds() + buffer_time
-        
-        current_time = datetime.now()
-        
-        if token in last_timer_set_time:
-            time_since_last_set = (current_time - last_timer_set_time[token]).total_seconds()
-            if time_since_last_set < 10:
-                logging.info(f"Not resetting timer for {token} as it is within the spare time.")
-                return Response(str(prediction), status=200)
-        
-        if token in timers:
-            timers[token].cancel()
-        
-        timers[token] = Timer(delay, run_check_accuracy)
-        timers[token].start()
-        
-        last_timer_set_time[token] = current_time
-        
-        logging.info(f"Setting Timer for check_accuracy with delay: {delay} seconds")
-        
+
         return Response(str(prediction), status=200)
     except Exception as e:
+        logging.error(f"Error during inference generation for {token}/{timeframe}: {str(e)}")
         return Response(json.dumps({"error": str(e)}), status=500, mimetype='application/json')
+
+def run_check_accuracy(token, timeframe):
+    with app.app_context():
+        try:
+            check_accuracy(token, timeframe)
+        except Exception as e:
+            logging.error(f"Error during accuracy check for {token}/{timeframe}: {str(e)}")
     
 @app.route("/check_accuracy/<string:token>/<string:timeframe>")
 def check_accuracy(token, timeframe):
-    logging.info(f"check_accuracy called for {token}/{timeframe}")  # Log when this function is called
+    price_history = PriceHistory(token, timeframe)
+    logging.info(f"check_accuracy called for {token}/{timeframe}")
     try:
-               # Convert timeframe to seconds for processing
-        if timeframe.endswith('m'):
-            numeric_timeframe = int(timeframe[:-1]) * 60  # Convert minutes to seconds
-        elif timeframe.endswith('d'):
-            numeric_timeframe = int(timeframe[:-1]) * 86400  # Convert days to seconds
-        else:
-            raise ValueError(f"Invalid timeframe: {timeframe}. Expected format like '10m', '20m', or '1d'.")
+        prediction = price_history.get_latest_prediction_with_accuracy(token, timeframe)
+        logging.info(f"Prediction: {prediction}")
+        if prediction is None:
+            raise ValueError(f"No prediction found for {token}/{timeframe}")
 
-        current_price = get_current_price(token)
-        if current_price is None:
-            logging.error(f"Current price for {token} is None.")
-            return jsonify({"error": "Current price not available"}), 500
-        
-        initial_price = price_history.get_latest_prediction(token, timeframe)['predicted_price']
-        
-        # Ensure initial_price is valid
-        if initial_price is None:
-            logging.error(f"No previous prediction found for {token}/{timeframe}.")
-            return jsonify({"error": "No previous prediction available"}), 500
-        
-        price_history.update_actual_price(token, timeframe, current_price, datetime.now().isoformat())
-        
-        accuracy = 1 - abs(initial_price - current_price) / current_price
-        
+        accuracy = prediction.get('accuracy')
+
+        if accuracy is None:
+            raise ValueError(f"Accuracy is None for {token}/{timeframe}")
+
         logging.info(f"Accuracy for {token}/{timeframe}: {accuracy}")
-        if accuracy < 0.98:
+        if accuracy < 97:
             logging.info(f"Accuracy for {token}/{timeframe} is below threshold: {accuracy}")
-            auto_improve(token, timeframe)
+            auto_improve(token, timeframe, accuracy)
 
-        return jsonify({
-            "token": token,
-            "timeframe": timeframe,
-            "predicted_price": initial_price,
-            "actual_price": current_price,
-            "accuracy": accuracy
-        })
+        return jsonify({"accuracy": accuracy}), 200
+
+    except ValueError as ve:
+        logging.error(f"ValueError in check_accuracy for {token}/{timeframe}: {str(ve)}")
+        return jsonify({"error": str(ve)}), 500
+
     except Exception as e:
         logging.error(f"Error in check_accuracy for {token}/{timeframe}: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-def calculate_margin_error(predicted_price, actual_price):
-    return abs(predicted_price - actual_price) / actual_price * 100
-
-error_history = deque(maxlen=100)  # Store last 100 errors for each token/timeframe
-
-learning_rate = 0.01
-#ACCURACY_THRESHOLD = 0.95
-
-def auto_improve(token, timeframe):
-    history = price_history.get_history(token, timeframe)
+def auto_improve(token, timeframe, accuracy):
     model_file = f"{model_file_path}_{token.lower()}_{timeframe}.pkl"
     
     with open(model_file, "rb") as f:
-        combined_model = pickle.load(f)
+        model = pickle.load(f)
     
-    # Extract the latest actual and predicted prices
-    latest_prediction = history[-1]
-    actual_price = latest_prediction['actual_price']
-    predicted_price = latest_prediction['predicted_price']
+    new_learning_rate = max(0.0001, min(0.01 / (1 + accuracy), 0.01))
     
-    # Calculate error
-    error = actual_price - predicted_price
+    # Update model parameters if GARCH model exists
+    if isinstance(model, dict) and 'garch' in model:
+        garch_model = model['garch']
+        if hasattr(garch_model, 'volatility'):
+            garch_model.volatility.rescale = new_learning_rate
+      
+    price_series = combine_price_data(token, timeframe)
+    if price_series is None:
+        return
     
-    # Prepare data for re-fitting
-    prices = [h['actual_price'] for h in history]
-    returns = np.diff(np.log(prices))
-    
-    # Re-fit ARIMA model
-    arima_order = combined_model['arima'].order
-    arima_model = ARIMA(prices, order=arima_order)
+    if len(price_series) < 2:
+        logging.error("Not enough data: price_series has fewer than 2 entries")
+        return
+
+    # Step 1: Fit ARIMA model
+    price_series = pd.Series(price_series)
+    arima_model = ARIMA(price_series, order=(1,1,1))  # Adjust the order if needed
     arima_results = arima_model.fit()
-    
-    # Re-fit GARCH model
-    garch_order = combined_model['garch'].order
-    garch_model = arch_model(returns, vol='Garch', p=garch_order[0], q=garch_order[1])
-    garch_results = garch_model.fit(disp='off')
-    
-    # Update combined model
-    combined_model['arima'] = arima_results
-    combined_model['garch'] = garch_results
-    
-    # Save the updated model
+
+    # Step 2: Get residuals from ARIMA model
+    residuals = arima_results.resid
+
+    # Step 3: Fit GARCH model to the residuals
+    garch_model = arch_model(residuals, vol='GARCH', p=1, q=1)
+    garch_results = garch_model.fit()
+
+    # Update the combined model
+    combined_model = {
+        'arima': arima_results,
+        'garch': garch_results
+    }
+
+    # Save the updated combined model
     with open(model_file, "wb") as f:
         pickle.dump(combined_model, f)
-    
-    logging.info(f"Model re-fitted for {token}_{timeframe}. New ARIMA order: {arima_order}, GARCH order: {garch_order}")
-    logging.info(f"New ARIMA parameters: {arima_results.params}")
-    logging.info(f"New GARCH parameters: {garch_results.params}")
-    
-    return abs(error)
+    #train_model(token, timeframe)
+    logging.info(f"Model for {token}/{timeframe} updated and saved.")
 
+def combine_price_data(token, timeframe):
+    # Load the historical price data from CSV
+    price_history = PriceHistory(token, timeframe)
+    price_data = pd.read_csv(os.path.join(training_price_data_path, f"{token.lower()}usdt_1d.csv"), index_col='date', parse_dates=True)
+    csv_price_series = price_data['close']
+    csv_price_series = csv_price_series.sort_index().asfreq('D')
+
+    # Adjust for timeframe
+    if timeframe == '10m':
+        csv_price_series = csv_price_series.resample('10T').interpolate(method='linear')
+    elif timeframe == '20m':
+        csv_price_series = csv_price_series.resample('20T').interpolate(method='linear')
+    elif timeframe == '60m':
+        csv_price_series = csv_price_series.resample('60T').interpolate(method='linear')
+
+    # Extract the latest actual prices from history
+    history = price_history.get_history(token, timeframe)
+    history_price_series = pd.Series(
+        [entry['actual_price'] for entry in history if entry['actual_price'] is not None],
+        index=[entry['timestamp'] for entry in history if entry['actual_price'] is not None]
+    )
+    history_price_series.index = pd.to_datetime(history_price_series.index)
+
+    # Combine the two data sources
+    combined_price_series = pd.concat([csv_price_series, history_price_series])
+    combined_price_series = combined_price_series.sort_index().asfreq('D').interpolate(method='linear')
+
+    return combined_price_series
 
 @app.route("/history/<string:token>/<string:timeframe>")
 def get_price_history(token, timeframe):
+    price_history = PriceHistory(token, timeframe)
     history = price_history.get_history(token, timeframe)
     return jsonify(history)
     
@@ -254,5 +253,5 @@ def update():
         return "1"
 
 if __name__ == "__main__":
-    update_data()
+   # update_data()
     app.run(host="0.0.0.0", port=8000)
