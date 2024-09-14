@@ -7,6 +7,9 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Create and set permissions for the data directory
+RUN mkdir /data && chmod 777 /data
+
 # Upgrade pip
 RUN pip install --no-cache-dir --upgrade pip
 
