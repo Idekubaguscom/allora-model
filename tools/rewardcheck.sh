@@ -77,6 +77,7 @@ signin() {
 walletID=$(echo "$response" | jq -r '.data.id')
 points=$(checkPoints "$walletID")
 echo "$points"
+echo
 total_point=$(echo "$points" | awk '/Total Points:/ {print $3}' | grep -oE '[0-9]+([.][0-9]+)?')
 total_point_sum=$(awk -v a="$total_point_sum" -v b="$total_point" 'BEGIN {printf "%.3f", a + b}')
 }
