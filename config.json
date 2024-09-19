@@ -1,14 +1,14 @@
 {
     "wallet": {
-        "addressKeyName": "wallet",
+        "addressKeyName": "",
         "addressRestoreMnemonic": "",
-        "alloraHomeDir": "",
+        "alloraHomeDir": "/home/idekubagus/.allorad",
         "gas": "1000000",
-        "gasAdjustment": 1.0,
+        "gasAdjustment": 1.5,
         "nodeRpc": "",
-        "maxRetries": 1,
+        "maxRetries": 2,
         "delay": 1,
-        "submitTx": false
+        "submitTx": true
     },
     "worker": [
         {

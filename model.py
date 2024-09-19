@@ -41,7 +41,7 @@ def download_data():
             try:
                 headers = {
                     "accept": "application/json",
-                    "x-cg-demo-api-key": "CG-YOUR-API-KEY"  # replace with your API key
+                    "x-cg-demo-api-key": ""  # replace with your API key
                 }
                 url = get_coingecko_url(token)
                 response = requests.get(url, headers=headers)
@@ -84,6 +84,7 @@ def resample_data(price_series, timeframe):
         raise ValueError(f"Unsupported timeframe: {timeframe}")
 
 def train_model(token, timeframe):
+    os.makedirs(model_file_path, exist_ok=True)
     # Load and preprocess data
     price_data = pd.read_csv(os.path.join(training_price_data_path, f"{token.lower()}usdt_1d.csv"), index_col='date', parse_dates=True)
     price_series = price_data['close']

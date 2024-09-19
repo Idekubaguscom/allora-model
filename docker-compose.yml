@@ -30,8 +30,6 @@ services:
     image: alloranetwork/allora-offchain-node:latest
     volumes:
       - ./worker-data:/data
-    ports:
-      - 2112:2112
     depends_on:
       - inference
     env_file:

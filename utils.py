@@ -29,7 +29,7 @@ def get_current_price(token, retries=3, backoff_factor=1):
     url = f"https://api.coingecko.com/api/v3/simple/price?ids={token_map[token]}&vs_currencies=usd"
     headers = {
         "accept": "application/json",
-        "x-cg-demo-api-key": os.environ.get("CG-YOUR-API-KEY")
+        "x-cg-demo-api-key": os.environ.get("")
     }
 
     for attempt in range(retries):
